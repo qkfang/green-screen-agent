@@ -74,6 +74,15 @@ def test_host_allow_list():
 
 
 def test_tool_specs_are_strict_function_schemas():
+    assert TOOL_NAMES == (
+        "connect",
+        "read_screen",
+        "type_text",
+        "type_credential",
+        "press_key",
+        "wait_for_text",
+        "disconnect",
+    )
     assert len(set(TOOL_NAMES)) == len(TOOL_SPECS) == 7
     for spec in TOOL_SPECS:
         params = spec["parameters"]

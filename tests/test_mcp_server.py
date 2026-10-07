@@ -33,6 +33,7 @@ def test_mcp_tools_mirror_tool_specs():
             assert (name in tool.input_schema.get("required", [])) == ("null" not in prop["type"])
     assert listed["read_screen"].annotations.read_only_hint is True
     assert listed["press_key"].annotations.destructive_hint is True
+    assert not set(listed) & {"get_customer", "list_customers", "select_option", "update_customer"}
 
 
 def test_mcp_sign_on_flow(simulator):

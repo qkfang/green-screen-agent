@@ -57,6 +57,7 @@ def test_function_tools_and_agent_definition():
     definition = foundry_agent.agent_definition("gpt-4.1")
     assert definition.model == "gpt-4.1"
     assert definition.instructions == AGENT_INSTRUCTIONS
+    assert "application has no action API" in definition.instructions
     assert len(definition.tools) == len(TOOL_NAMES)
 
 

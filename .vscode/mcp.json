@@ -6,9 +6,8 @@
     },
     "tn3270": {
       "type": "stdio",
-      "command": "python",
-      "args": ["-m", "green_screen_agent.mcp_server"],
-      "envFile": "${workspaceFolder}/.env"
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "green_screen_agent.mcp_server"]
     }
   }
 }

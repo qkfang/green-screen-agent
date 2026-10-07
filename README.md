@@ -18,6 +18,14 @@ See [docs/research.md](docs/research.md) for the options that were evaluated.
 Tools: `connect`, `read_screen`, `type_text`, `type_credential`, `press_key`,
 `wait_for_text`, `disconnect`.
 
+These are terminal primitives, not application actions. Copilot is not given simulator
+objects, customer operations, menu metadata or a side-channel API. The simulator exposes
+only its TN3270 TCP listener: it encodes each screen as a 3270 data stream and changes
+application state only after parsing an inbound TN3270 record. Consequently, the agent
+must discover options from the actual received screen buffer, decide what to do, type into
+3270 fields, send an AID key, and verify the next received screen. The same path is used
+against the simulator and a real mainframe.
+
 ## Quick start
 
 ```bash
