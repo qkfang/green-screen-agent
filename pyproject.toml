@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "green-screen-agent"
+version = "0.1.0"
+description = "Let AI agents (Microsoft Foundry, GitHub Copilot CLI, VS Code) operate IBM 3270 green-screen applications over TN3270."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "tnz>=0.6.8",          # IBM's pure-Python TN3270 terminal emulator (Apache-2.0)
+    "mcp>=2.3,<3",         # Model Context Protocol server for Copilot CLI / VS Code
+    "python-dotenv>=1.2",
+]
+
+[project.optional-dependencies]
+foundry = [
+    "azure-ai-projects>=2.8,<3",
+    "azure-identity>=1.26",
+]
+dev = [
+    "pytest>=8",
+]
+
+[project.scripts]
+green-screen-agent = "green_screen_agent.foundry_agent:main"
+green-screen-mcp = "green_screen_agent.mcp_server:main"
+green-screen-simulator = "green_screen_agent.simulator.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "tk5: integration tests against a real MVS 3.8j TK5 system (set TK5_HOST to enable)",
+]
