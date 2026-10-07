@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "tn3270": {
+      "type": "local",
+      "command": "python",
+      "args": ["-m", "green_screen_agent.mcp_server"],
+      "env": {
+        "TN3270_HOST": "${TN3270_HOST:-127.0.0.1}",
+        "TN3270_PORT": "${TN3270_PORT:-3270}",
+        "TN3270_USERNAME": "${TN3270_USERNAME:-}",
+        "TN3270_PASSWORD": "${TN3270_PASSWORD:-}"
+      },
+      "tools": ["*"],
+      "timeout": 120000
+    }
+  }
+}

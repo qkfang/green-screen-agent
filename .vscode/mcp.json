@@ -1,8 +1,14 @@
 {
-    "servers": {
-        "microsoft-learn": {
-            "type": "http",
-            "url": "https://learn.microsoft.com/api/mcp"
-        }
+  "servers": {
+    "microsoft-learn": {
+      "type": "http",
+      "url": "https://learn.microsoft.com/api/mcp"
+    },
+    "tn3270": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "green_screen_agent.mcp_server"],
+      "envFile": "${workspaceFolder}/.env"
     }
+  }
 }
