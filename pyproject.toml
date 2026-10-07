@@ -34,6 +34,3 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
-markers = [
-    "tk5: integration tests against a real MVS 3.8j TK5 system (set TK5_HOST to enable)",
-]

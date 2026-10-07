@@ -271,7 +271,9 @@ class GreenScreenTools:
         try:
             if name not in TOOL_NAMES:
                 raise ToolError(f"Unknown tool {name!r}. Available tools: {', '.join(TOOL_NAMES)}.")
-            if isinstance(arguments, str):
+            if arguments is None:
+                arguments = {}
+            elif isinstance(arguments, str):
                 arguments = json.loads(arguments) if arguments.strip() else {}
             if not isinstance(arguments, Mapping):
                 raise ToolError("Tool arguments must be a JSON object.")
