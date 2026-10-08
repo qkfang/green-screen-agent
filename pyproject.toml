@@ -9,8 +9,8 @@ description = "Let AI agents (Microsoft Foundry, GitHub Copilot CLI, VS Code) op
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "tnz>=0.6.8",          # IBM's pure-Python TN3270 terminal emulator (Apache-2.0)
-    "mcp>=2.3,<3",         # Model Context Protocol server for Copilot CLI / VS Code
+    "tnz>=0.6.7",          # IBM's pure-Python TN3270 terminal emulator (Apache-2.0)
+    "mcp>=2.2,<3",         # Model Context Protocol server for Copilot CLI / VS Code
     "python-dotenv>=1.2",
 ]
 

@@ -68,13 +68,41 @@ The model runs in Foundry; the 3270 session and credentials stay in this process
 
 ### Real mainframe for testing (MVS 3.8j TK5 + KICKS)
 
+The Docker image is `linux/amd64` only. On Windows PowerShell, use the launcher below;
+it explicitly enables Docker's x86-64 emulation when the host is ARM64:
+
+```powershell
+.\scripts\run-tn3270.ps1
+# Wait ~2 minutes for the IPL; users HERC01 / CUL8TR
+$env:TN3270_USERNAME="HERC01"
+$env:TN3270_PASSWORD="CUL8TR"
+copilot --allow-tool='tn3270'
+```
+
+The equivalent Docker command is:
+
+```powershell
+docker run -d --platform linux/amd64 --name mvs-kicks -p 3270:3270 -p 8038:8038 backscratcher/tk5-mvs-kicks:latest
+```
+
+On macOS or Linux:
+
 ```bash
-docker run -d --name mvs-kicks -p 3270:3270 -p 8038:8038 backscratcher/tk5-mvs-kicks:latest
-# wait ~2 minutes for the IPL; users HERC01 / CUL8TR
+docker run -d --platform linux/amd64 --name mvs-kicks -p 3270:3270 -p 8038:8038 backscratcher/tk5-mvs-kicks:latest
 TN3270_USERNAME=HERC01 TN3270_PASSWORD=CUL8TR copilot --allow-tool='tn3270'
 ```
 
 Always `LOGOFF` from TSO - a dropped connection leaves the user "in use" until restart.
+
+Port 3270 opens the TK5 VTAM `Logon ===>` screen, not CICS. KICKS (the CICS-compatible
+transaction monitor) runs inside a TSO session, so start it from there:
+
+1. At `Logon ===>` sign on as `HERC01` / `CUL8TR`. This lands in the ISPF menu.
+2. Exit ISPF (`X` or PF3) to the TSO `READY` prompt.
+3. Enter `EXEC KICKSSYS.V1R5M0.CLIST(KICKS)`. The KICKS logo (KSGM) appears.
+4. Press CLEAR until the screen is blank, type a transaction id at the top left and press
+   Enter: `BTC0` (Nevada Dept. of Labor demo), `MENU` (Murach customer sample) or `KSGM`.
+5. To leave, clear the screen and enter `KSSF` (back to `READY`), then `LOGOFF`.
 
 ## Security notes
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from green_screen_agent.simulator import BackgroundSimulator
-from green_screen_agent.terminal import TerminalError, Tn3270Terminal, column_ruler, normalize_key
+from green_screen_agent.terminal import TerminalError, Tn3270Terminal, _Tnz, column_ruler, normalize_key
 
 from conftest import DEMO_SECRET, DEMO_USER, unused_port
 
@@ -157,6 +159,33 @@ def test_slow_host_keeps_keyboard_locked():
             term.press("enter")
         found, screen = term.wait_for_text("MAIN MENU", timeout=5)
         assert found and not screen.keyboard_locked
+
+
+def _offline_tnz(cls):
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    tn = cls(name="offline")
+    tn.pwait = tn.system_lock_wait = False
+    sent: list[bytes] = []
+    tn.send_3270_data = lambda record: sent.append(bytes(record))
+    return tn, sent
+
+
+def test_unformatted_screen_input_is_sent_without_sba():
+    # e.g. the blank CICS/KICKS screen after CLEAR, where a transaction id is typed at 1,1
+    tn, sent = _offline_tnz(_Tnz)
+    tn.key_data("KSSF")
+    assert not any(tn.plane_fa), "typing must not create a field attribute"
+    tn.enter()
+    assert sent[-1] == bytes([0x7D]) + tn.address_bytes(4) + "KSSF".encode("cp037")
+
+
+def test_formatted_screen_input_still_uses_sba():
+    tn, sent = _offline_tnz(_Tnz)
+    tn.plane_fa[9] = 0x40  # unprotected field starting at address 10
+    tn.curadd = 10
+    tn.key_data("AB")
+    tn.enter()
+    assert sent[-1] == bytes([0x7D]) + tn.address_bytes(12) + b"\x11" + tn.address_bytes(10) + "AB".encode("cp037")
 
 
 def test_connect_errors(simulator):

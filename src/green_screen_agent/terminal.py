@@ -54,6 +54,36 @@ class TerminalError(Exception):
     """An operation is not possible in the current terminal state."""
 
 
+class _Tnz(_tnz.Tnz):
+    """``tnz`` session with correct 3270 behaviour on unformatted screens.
+
+    On a screen without field attributes (e.g. the blank CICS/KICKS screen after CLEAR),
+    ``tnz`` marks the MDT by writing an attribute byte at buffer address -1, which turns
+    the last screen position into a field, and then sends the input with a leading SBA
+    order. A real 3270 sends unformatted input as plain data after the cursor address,
+    and CICS-style hosts read the transaction id from there, so they reject the SBA form
+    (KICKS abends every transaction with APCT).
+    """
+
+    def key_data(self, text: str, onerow: bool = False, zti: Any = None) -> int:
+        unformatted = not any(self.plane_fa)
+        try:
+            return super().key_data(text, onerow, zti)
+        finally:
+            if unformatted:
+                self.plane_fa[-1] = 0
+
+    def send_aid(self, aid: int, short: bool | None = None) -> None:
+        if short is None:
+            short = 0x6B <= aid <= 0x6F  # PAx or CLEAR
+        if short or self.inpid or any(self.plane_fa):
+            super().send_aid(aid, short)
+            return
+        data = bytes(self.plane_dc).replace(b"\x00", b"")
+        self.aid = aid
+        self.send_3270_data(bytes([aid]) + self.address_bytes(self.curadd) + data)
+
+
 def normalize_key(key: str) -> str:
     """Normalise user/LLM key names such as ``"F3"``, ``"PF03"`` or ``"Enter"``."""
     name = re.sub(r"[\s_\-]", "", str(key).strip().lower())
@@ -323,7 +353,7 @@ class Tn3270Terminal:
         if self._is_connected():
             raise TerminalError(f"Already connected to {self._address}. Disconnect first.")
         self._disconnect()
-        tn = _tnz.Tnz(name=f"{host}:{port}")
+        tn = _Tnz(name=f"{host}:{port}")
         tn.terminal_type = self.terminal_type
         tn.amaxrow, tn.amaxcol = self.screen_size
         tn.encoding = self.codepage
