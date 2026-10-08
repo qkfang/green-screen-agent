@@ -63,6 +63,8 @@ also act as the operator on the same connection: click the screen and type, use 
 Enter, F1-F12 (Shift = PF13-24) or the keypad, Connect/Disconnect. The log tags each entry
 `AGENT` or `OPERATOR`. Passwords never reach the page (non-display fields are blanked).
 
+![TN3270 Live: the agent browsing SYS2.JCLLIB in ISPF on MVS 3.8j (TK5), with its tool calls in the action log](docs/tn3270-live.png)
+
 There are two ways to run it. Both serve one shared terminal session.
 
 1. **Built into the MCP server** (the default in `.mcp.json` and `.vscode/mcp.json`):
