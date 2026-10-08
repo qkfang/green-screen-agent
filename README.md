@@ -152,6 +152,30 @@ transaction monitor) runs inside a TSO session, so start it from there:
    Enter: `BTC0` (Nevada Dept. of Labor demo), `MENU` (Murach customer sample) or `KSGM`.
 5. To leave, clear the screen and enter `KSSF` (back to `READY`), then `LOGOFF`.
 
+#### Default TSO users
+
+TK4- and TK5 ship with these TSO accounts (from
+[humbertodias/docker-hercules-zos](https://github.com/humbertodias/docker-hercules-zos)):
+
+| User | Password | Access |
+|---|---|---|
+| `HERC01` | `CUL8TR` | Fully authorized, with access to the RAKF users and profiles tables |
+| `HERC02` | `CUL8TR` | Fully authorized, without access to the RAKF users and profiles tables |
+| `HERC03` | `PASS4U` | Regular user |
+| `HERC04` | `PASS4U` | Regular user |
+| `IBMUSER` | `IBMPASS` | Fully authorized, without RAKF table access; for recovery only |
+
+Because a dropped session leaves its user "in use", a second account (for example
+`HERC02`) is handy when `HERC01` is stuck.
+
+Common PF keys in ISPF/RFE: **F3** exit, **F7** page back, **F8** page forward.
+
+Further reading:
+
+- [MVS TK4- v1.00 User's Manual (PDF)](http://wotho.ethz.ch/tk4-/MVS_TK4-_v1.00_Users_Manual.pdf)
+- [IBM MVS - Editing, compiling and executing a COBOL program](https://www.youtube.com/watch?v=YA3FQOzr0ag)
+- [Hello world - COBOL](https://youtu.be/exAp0Ddbi-c)
+
 ### Deploy to Azure Container Apps
 
 Two container apps in one Container Apps environment:
