@@ -27,6 +27,18 @@ must discover options from the actual received screen buffer, decide what to do,
 3270 fields, send an AID key, and verify the next received screen. The same path is used
 against the simulator and a real mainframe.
 
+## Demo: green screen controlled by Copilot via MCP
+
+GitHub Copilot in VS Code drives the TK5 mainframe through the `tn3270-live` MCP server
+(`connect`, `type_text`, `type_credential`, `press_key`, ...):
+
+![GitHub Copilot in VS Code logging on to TK5 through the tn3270-live MCP server](docs/demo-copilot-mcp.png)
+
+Each agent interaction is visualised in the live green screen: the ISPF screen as the host
+sent it, with every tool call in the action log alongside it:
+
+![TN3270 Live showing the ISPF primary option menu and the action log of each tool call](docs/demo-live-actions.png)
+
 ## Quick start
 
 ```bash
