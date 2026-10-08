@@ -10,6 +10,7 @@ The same tool set is exposed two ways:
 |---|---|---|
 | **Microsoft Foundry agent** (Python, `azure-ai-projects` 2.x prompt agent) | function tools executed locally | `green_screen_agent.foundry_agent` |
 | **GitHub Copilot CLI / VS Code** | MCP server (stdio) | `green_screen_agent.mcp_server` |
+| **Live green screen** (browser) | web view + MCP streamable HTTP on one shared session | `green_screen_agent.live` |
 
 A **TN3270 host simulator** with a small CICS-style customer application is included for
 testing, and the tools were also verified against a real MVS 3.8j system (TK5 in Docker).
@@ -51,6 +52,39 @@ copilot --allow-tool='tn3270'
 
 For `copilot -p` (non-interactive) set `GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP=true`.
 In VS Code, `.vscode/mcp.json` starts the same server (agent mode) using `.env`.
+
+### Live green screen: watch the agent work
+
+Open a browser on the agent's 3270 session and watch every action as it happens: each
+tool call appears in an action log (with the screen returned to the agent), typed text is
+animated keystroke by keystroke into its field, AID keys flash on screen with the `X SYSTEM`
+lock indicator while the host responds, and every screen the host sends is redrawn. You can
+also act as the operator on the same connection: click the screen and type, use Tab/arrows,
+Enter, F1-F12 (Shift = PF13-24) or the keypad, Connect/Disconnect. The log tags each entry
+`AGENT` or `OPERATOR`. Passwords never reach the page (non-display fields are blanked).
+
+There are two ways to run it. Both serve one shared terminal session.
+
+1. **Built into the MCP server** (the default in `.mcp.json` and `.vscode/mcp.json`):
+   `python -m green_screen_agent.mcp_server --live [PORT]` serves the session that Copilot
+   is driving at <http://127.0.0.1:3271/>. If the port is taken, a free port is used; the
+   URL is logged to stderr (the MCP server output in VS Code).
+2. **Standalone front end that owns the connection**, with agents attaching over MCP HTTP.
+   The session stays open across agent runs, and several clients can share it:
+
+   ```bash
+   python -m green_screen_agent.live            # or: green-screen-live [--port 3271] [--connect]
+   # UI:  http://127.0.0.1:3271/
+   # MCP: http://127.0.0.1:3271/mcp  (streamable HTTP)
+   ```
+
+   Point the client at the HTTP endpoint instead of the stdio server, e.g. VS Code
+   `.vscode/mcp.json`: `"tn3270": {"type": "http", "url": "http://127.0.0.1:3271/mcp"}`, or
+   Copilot CLI `.mcp.json`: `"tn3270": {"type": "http", "url": "http://127.0.0.1:3271/mcp", "tools": ["*"]}`.
+
+The page receives events over Server-Sent Events (`/events`). Operator actions go through
+`/api/tool` (the same tools the agent uses) and `/api/keyboard` (raw keystrokes and cursor
+moves). Other observers can subscribe in Python with `Tn3270Terminal.add_listener`.
 
 ### Microsoft Foundry agent
 
@@ -112,3 +146,6 @@ transaction monitor) runs inside a TSO session, so start it from there:
 - Screen text is untrusted input (prompt injection); the instructions tell the model to
   treat it as data. Use `--confirm-keys` (Foundry) or Copilot's tool approvals for
   write operations, and TLS (`TN3270_TLS=true`, port 992) outside a lab.
+- The live view drives a real session, so it listens on 127.0.0.1 only by default and rejects
+  requests with a foreign `Host` or `Origin` header (DNS rebinding / cross-site requests).
+  It has no login: any local process can use it. Do not use `--host 0.0.0.0` on an untrusted network.

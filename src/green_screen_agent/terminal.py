@@ -9,12 +9,18 @@ host sends over the TN3270 protocol.
 ``tnz`` drives its own asyncio event loop and is not thread-safe, so every
 terminal owns one worker thread with a private event loop. All ``tnz`` calls
 are marshalled to that thread, which also serialises concurrent tool calls.
+
+Observers (such as the live web view) can subscribe with
+:meth:`Tn3270Terminal.add_listener` to receive every screen, keystroke and key
+press as it happens.
 """
 
 from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextvars
+import logging
 import re
 import threading
 import time
@@ -24,6 +30,12 @@ from typing import Any, Callable, TypeVar
 from tnz import tnz as _tnz
 
 T = TypeVar("T")
+Listener = Callable[[dict[str, Any]], None]
+
+log = logging.getLogger(__name__)
+
+action_source: contextvars.ContextVar[str] = contextvars.ContextVar("tn3270_action_source", default="agent")
+"""Who is driving the terminal (``"agent"`` or ``"operator"``); attached to every emitted event."""
 
 SCREEN_SIZES: dict[str, tuple[int, int]] = {
     "24x80": (24, 80),  # model 2
@@ -44,6 +56,17 @@ LOCAL_KEYS = {
     "newline": "key_newline",
 }
 """Editing keys that only change the local screen buffer."""
+
+CURSOR_KEYS = {
+    "left": "key_curleft",
+    "right": "key_curright",
+    "up": "key_curup",
+    "down": "key_curdown",
+    "end": "key_end",
+    "backspace": "key_backspace",
+    "delete": "key_delete",
+}
+"""Local cursor/editing keys used by a human operator's keyboard (live view)."""
 
 VALID_KEYS_HELP = "enter, clear, pf1-pf24, pa1-pa3, attn, tab, backtab, home, eraseeof, eraseinput, newline"
 
@@ -94,7 +117,7 @@ def normalize_key(key: str) -> str:
     match = re.fullmatch(r"pa0*(\d)", name)
     if match and 1 <= int(match.group(1)) <= 3:
         return f"pa{int(match.group(1))}"
-    if name in AID_KEYS or name in LOCAL_KEYS or name == "attn":
+    if name in AID_KEYS or name in LOCAL_KEYS or name in CURSOR_KEYS or name == "attn":
         return name
     raise TerminalError(f"Unknown key {key!r}. Valid keys: {VALID_KEYS_HELP}.")
 
@@ -134,6 +157,26 @@ class Screen:
     keyboard_locked: bool
     connected: bool
     host: str
+    bright: tuple[tuple[int, int, int], ...] = ()
+    """Intensified, displayable fields as ``(row, col, length)`` of their first character."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-friendly snapshot for viewers (hidden fields are already blanked)."""
+        return {
+            "rows": list(self.rows),
+            "cols": self.cols,
+            "cursor": [self.cursor_row, self.cursor_col],
+            "fields": [
+                {"row": f.row, "col": f.col, "length": f.length, "hidden": f.hidden,
+                 "numeric": f.numeric, "modified": f.modified}
+                for f in self.fields
+            ],
+            "bright": [list(b) for b in self.bright],
+            "formatted": self.formatted,
+            "keyboard_locked": self.keyboard_locked,
+            "connected": self.connected,
+            "host": self.host,
+        }
 
     @property
     def text(self) -> str:
@@ -244,11 +287,45 @@ class Tn3270Terminal:
         self._address = ""
         self._closed = False
         self._worker: threading.Thread | None = None
+        self._listeners: list[Listener] = []
+        self._listeners_lock = threading.Lock()
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="tn3270", initializer=self._init_worker
         )
 
     # ------------------------------------------------------------ public API
+
+    def add_listener(self, listener: Listener) -> Callable[[], None]:
+        """Call ``listener(event)`` for every terminal event; returns an unsubscribe function.
+
+        Events are dicts with a ``type`` of ``screen`` (``screen`` = :meth:`Screen.to_dict`),
+        ``type`` (text typed into a field; empty ``text`` for hidden fields), ``key``,
+        ``disconnected`` or any type passed to :meth:`emit`. Listeners run on the terminal's
+        worker thread (or the caller's thread for :meth:`emit`), so they must be quick and
+        thread-safe.
+        """
+        with self._listeners_lock:
+            self._listeners.append(listener)
+
+        def remove() -> None:
+            with self._listeners_lock:
+                if listener in self._listeners:
+                    self._listeners.remove(listener)
+
+        return remove
+
+    def emit(self, event: dict[str, Any]) -> None:
+        """Send ``event`` to the listeners, tagged with the current :data:`action_source`."""
+        with self._listeners_lock:
+            listeners = list(self._listeners)
+        if not listeners:
+            return
+        event = {**event, "source": action_source.get(), "time": time.time()}
+        for listener in listeners:
+            try:
+                listener(event)
+            except Exception:  # noqa: BLE001 - an observer must never break the session
+                log.exception("TN3270 event listener failed")
 
     @property
     def connected(self) -> bool:
@@ -284,6 +361,10 @@ class Tn3270Terminal:
         """Wait until ``text`` appears on the screen (case-insensitive)."""
         return self._call(self._wait_for_text, text, self._timeout(timeout))
 
+    def move_cursor(self, row: int, col: int) -> Screen:
+        """Move the cursor to the 1-based position (a local action, like clicking in an emulator)."""
+        return self._call(self._move_cursor, row, col)
+
     def disconnect(self) -> bool:
         """Close the connection. Returns ``False`` if there was no connection."""
         return self._call(self._disconnect)
@@ -315,7 +396,8 @@ class Tn3270Terminal:
             raise TerminalError("The terminal has been closed.")
         if threading.current_thread() is self._worker:
             return fn(*args)
-        return self._executor.submit(fn, *args).result()
+        # Run in the caller's context so events carry its action_source.
+        return self._executor.submit(contextvars.copy_context().run, fn, *args).result()
 
     def _timeout(self, timeout: float | None) -> float:
         return self.timeout if timeout is None else max(0.0, float(timeout))
@@ -379,6 +461,7 @@ class Tn3270Terminal:
             loop = asyncio.get_event_loop()
             if not loop.is_closed():
                 loop.run_until_complete(asyncio.sleep(0))
+            self.emit({"type": "disconnected", "host": self._address})
         return True
 
     def _pump(self) -> None:
@@ -411,10 +494,12 @@ class Tn3270Terminal:
     def _press(self, key: str, timeout: float) -> KeyResult:
         tn = self._require()
         name = normalize_key(key)
-        if name in LOCAL_KEYS:
-            getattr(tn, LOCAL_KEYS[name])()
+        if name in LOCAL_KEYS or name in CURSOR_KEYS:
+            getattr(tn, LOCAL_KEYS.get(name) or CURSOR_KEYS[name])()
+            self.emit({"type": "key", "key": name, "aid": False})
             return KeyResult(name, self._snapshot(), None)
         if name == "attn":
+            self.emit({"type": "key", "key": name, "aid": True})
             tn.attn()
             deadline = time.monotonic() + timeout
             tn.wait(min(timeout, 5.0))
@@ -426,6 +511,7 @@ class Tn3270Terminal:
                 "The keyboard is locked because the host has not finished the previous request. "
                 "Use wait_for_text or read_screen and try again."
             )
+        self.emit({"type": "key", "key": name, "aid": True})
         try:
             getattr(tn, name)()
         except _tnz.TnzError as exc:
@@ -500,9 +586,22 @@ class Tn3270Terminal:
             typed = tn.key_data(text[:available])
         except _tnz.TnzError as exc:
             raise TerminalError(f"Typing failed: {exc}") from exc
-        screen = self._snapshot()
         r, c = address // cols + 1, address % cols + 1
+        hidden = faddr >= 0 and not tn.is_displayable_attr(fattr)
+        self.emit({
+            "type": "type", "row": r, "col": c, "text": "" if hidden else text[:typed], "typed": typed,
+            "hidden": hidden, "clear": bool(clear_field and faddr >= 0),
+            "field_length": available if faddr >= 0 else None,
+        })
+        screen = self._snapshot()
         return TypeResult(r, c, typed, len(text), screen.field_at(r, c), adjusted)
+
+    def _move_cursor(self, row: int, col: int) -> Screen:
+        tn = self._require()
+        if not (1 <= row <= tn.maxrow and 1 <= col <= tn.maxcol):
+            raise TerminalError(f"Position row {row}, col {col} is outside the {tn.maxrow}x{tn.maxcol} screen.")
+        tn.set_cursor_address((row - 1) * tn.maxcol + (col - 1))
+        return self._snapshot()
 
     def _not_input_message(self, address: int) -> str:
         cols = self._tn.maxcol
@@ -551,7 +650,14 @@ class Tn3270Terminal:
                     label=self._label(chars, attrs, i, cols, size),
                 )
             )
-        return Screen(
+        bright = []
+        for i, (faddr, fattr) in enumerate(attrs):
+            if tn.is_displayable_attr(fattr) and tn.is_intensified_attr(fattr):
+                start = (faddr + 1) % size
+                length = (attrs[(i + 1) % len(attrs)][0] - start) % size
+                if length:
+                    bright.append((start // cols + 1, start % cols + 1, length))
+        screen = Screen(
             rows=rows,
             cols=cols,
             cursor_row=tn.curadd // cols + 1,
@@ -561,7 +667,11 @@ class Tn3270Terminal:
             keyboard_locked=self._locked(tn),
             connected=not tn.seslost,
             host=self._address,
+            bright=tuple(bright),
         )
+        if self._listeners:
+            self.emit({"type": "screen", "screen": screen.to_dict()})
+        return screen
 
     @staticmethod
     def _label(chars: list[str], attrs: list[tuple[int, int]], i: int, cols: int, size: int) -> str:

@@ -27,9 +27,13 @@ dev = [
 green-screen-agent = "green_screen_agent.foundry_agent:main"
 green-screen-mcp = "green_screen_agent.mcp_server:main"
 green-screen-simulator = "green_screen_agent.simulator.server:main"
+green-screen-live = "green_screen_agent.live.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+green_screen_agent = ["live/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -7,7 +7,11 @@
     "tn3270": {
       "type": "stdio",
       "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "green_screen_agent.mcp_server"]
+      "args": ["-m", "green_screen_agent.mcp_server", "--live"]
+    },
+    "tn3270-live": {
+      "type": "http",
+      "url": "http://127.0.0.1:3271/mcp"
     }
   }
 }

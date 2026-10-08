@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TN3270 Live</title>
+<style>
+  :root {
+    --bg: #0b0f0c; --panel: #121a14; --line: #1f2e23; --muted: #6f8a76; --text: #cfe8d5;
+    --phosphor: #39ff6a; --phosphor-dim: #1f9e43; --bright: #d9ffe3; --amber: #ffb000; --red: #ff5b5b;
+    --agent: #4fb3ff; --operator: #ffb000;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 18px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(#111a13, #0d140f); }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: .08em; color: var(--phosphor); white-space: nowrap;
+    text-shadow: 0 0 8px rgba(57,255,106,.5); font-family: "Cascadia Mono", Consolas, monospace; }
+  .pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.ok { color: var(--phosphor); border-color: var(--phosphor-dim); }
+  .pill.bad { color: var(--red); border-color: #7a2b2b; }
+  .pill.live::before { content: "●"; margin-right: 6px; animation: pulse 1.4s infinite; }
+  header .spacer { flex: 1; }
+  header code { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  button { background: #18241b; color: var(--text); border: 1px solid #2a3d2f; border-radius: 6px; padding: 5px 10px;
+    font: 12px "Cascadia Mono", Consolas, monospace; cursor: pointer; }
+  button:hover { border-color: var(--phosphor-dim); color: var(--phosphor); }
+  button.pressed { background: var(--phosphor); color: #000; border-color: var(--phosphor); box-shadow: 0 0 14px var(--phosphor); }
+  button.primary { border-color: var(--phosphor-dim); color: var(--phosphor); }
+  body { display: flex; flex-direction: column; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 420px); flex: 1; min-height: 0; }
+  .stage { padding: 18px; overflow: auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .bezel { position: relative; background: #050806; border: 1px solid #1a271d; border-radius: 14px; padding: 16px 18px 10px;
+    box-shadow: inset 0 0 60px rgba(57,255,106,.06), 0 10px 40px rgba(0,0,0,.6); }
+  .caption { display: flex; align-items: center; gap: 10px; min-height: 30px; font: 13px "Cascadia Mono", Consolas, monospace;
+    color: var(--muted); margin-bottom: 8px; }
+  .caption .badge { visibility: hidden; }
+  .caption.active .badge, .caption.done .badge { visibility: visible; }
+  .caption .what { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .caption .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .caption.active .dot { background: var(--phosphor); box-shadow: 0 0 10px var(--phosphor); animation: pulse .9s infinite; }
+  #screen { position: relative; font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+    color: var(--phosphor); text-shadow: 0 0 6px rgba(57,255,106,.55); white-space: pre; line-height: 1.22;
+    outline: none; cursor: text; user-select: none; }
+  #screen:focus-visible { box-shadow: 0 0 0 1px var(--phosphor-dim); }
+  #screen::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.18) 3px); }
+  #screen.off { opacity: .35; filter: grayscale(.6); }
+  .row { height: 1.22em; }
+  .row span { display: inline-block; width: 1ch; }
+  .in { box-shadow: inset 0 -1px 0 var(--phosphor-dim); }
+  .hi { color: var(--bright); text-shadow: 0 0 8px rgba(217,255,227,.7); }
+  .row span.cur { background: var(--phosphor); color: #000; text-shadow: none; animation: blink 1.05s steps(1) infinite; }
+  .typed { animation: typed 1.4s ease-out; }
+  #keycap { position: absolute; top: 10px; right: 14px; padding: 6px 14px; border-radius: 8px; border: 2px solid var(--phosphor);
+    color: #000; background: var(--phosphor); font: 700 18px "Cascadia Mono", Consolas, monospace; letter-spacing: .05em;
+    box-shadow: 0 0 24px var(--phosphor); opacity: 0; transform: scale(.8); transition: opacity .15s, transform .15s; z-index: 3; }
+  #keycap.show { opacity: 1; transform: scale(1); }
+  #keycap.operator { background: var(--operator); border-color: var(--operator); box-shadow: 0 0 24px var(--operator); }
+  .oia { display: flex; gap: 18px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #1d3a25;
+    font: 13px "Cascadia Mono", Consolas, monospace; color: var(--phosphor-dim); }
+  .oia .lock { color: var(--amber); min-width: 120px; }
+  .oia .err { color: var(--red); }
+  .oia .spacer { flex: 1; }
+  .keypad { display: flex; flex-wrap: wrap; gap: 6px; }
+  .keypad .group { display: flex; gap: 4px; flex-wrap: wrap; padding-right: 10px; border-right: 1px solid var(--line); }
+  .keypad .group:last-child { border-right: none; }
+  .hint { color: var(--muted); font-size: 12px; }
+  aside { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  aside .head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  aside h2 { font-size: 13px; margin: 0; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  aside .controls { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-left: auto; }
+  aside input[type=range] { width: 90px; accent-color: var(--phosphor); }
+  #log { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1; }
+  .entry { border: 1px solid var(--line); border-left: 3px solid var(--agent); border-radius: 6px; padding: 7px 9px;
+    margin-bottom: 6px; background: #0f1611; animation: slidein .25s ease-out; }
+  .entry.operator { border-left-color: var(--operator); }
+  .entry.running { box-shadow: 0 0 0 1px var(--phosphor-dim); }
+  .entry.failed { border-color: #5a2525; border-left-color: var(--red); }
+  .entry .top { display: flex; align-items: baseline; gap: 8px; font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+  .entry .name { color: var(--phosphor); font-weight: 600; }
+  .entry .args { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .entry .status { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .entry.failed .status { color: var(--red); }
+  .entry .summary { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .entry.failed .summary { color: #ff9a9a; }
+  .entry details summary { cursor: pointer; color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .entry pre { margin: 6px 0 0; padding: 8px; background: #050806; border-radius: 4px; color: var(--phosphor-dim);
+    font: 11px/1.3 "Cascadia Mono", Consolas, monospace; overflow-x: auto; max-height: 340px; }
+  .badge { font: 700 10px "Segoe UI", sans-serif; letter-spacing: .06em; padding: 1px 6px; border-radius: 4px; color: #000;
+    background: var(--agent); }
+  .badge.operator { background: var(--operator); }
+  .spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--phosphor-dim); border-top-color: transparent;
+    border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+  .empty { color: var(--muted); padding: 20px; text-align: center; font-size: 13px; }
+  @keyframes blink { 50% { background: transparent; color: var(--phosphor); text-shadow: 0 0 6px rgba(57,255,106,.55); } }
+  @keyframes typed { from { background: rgba(57,255,106,.55); color: #000; } to { background: transparent; } }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes slidein { from { opacity: 0; transform: translateY(6px); } }
+  @media (max-width: 860px) { body { display: block; } main { grid-template-columns: 1fr; } aside { max-height: 60vh; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>▌TN3270 LIVE</h1>
+  <span id="stream" class="pill">connecting…</span>
+  <span id="session" class="pill">no session</span>
+  <span class="spacer"></span>
+  <code id="mcp"></code>
+  <button id="btn-connect" class="primary" title="Connect to the configured host">Connect</button>
+  <button id="btn-disconnect" title="Close the TN3270 connection">Disconnect</button>
+</header>
+<main>
+  <section class="stage">
+    <div class="bezel">
+      <div id="caption" class="caption"><span class="dot"></span><span id="cap-badge" class="badge">AGENT</span><span id="cap-what" class="what">Idle - waiting for actions</span></div>
+      <div id="screen" class="off" tabindex="0" aria-label="3270 screen"></div>
+      <div id="keycap"></div>
+      <div class="oia">
+        <span>4A</span><span id="oia-lock" class="lock"></span><span id="oia-err" class="err"></span>
+        <span class="spacer"></span><span id="oia-host"></span><span id="oia-pos">--/---</span>
+      </div>
+    </div>
+    <div class="keypad" id="keypad"></div>
+    <div class="hint">Click the screen and type to act as the operator (Enter, Tab, arrows, Backspace, F1-F12, Shift+F1-F12 = PF13-24,
+      PgUp/PgDn = PF7/PF8). The agent and the operator share this one session - every action shows up here as it happens.</div>
+  </section>
+  <aside>
+    <div class="head">
+      <h2>Actions</h2><span id="count" class="pill">0</span>
+      <div class="controls">
+        <label title="Typing animation speed">Speed <input id="speed" type="range" min="0" max="100" value="60"></label>
+        <label><input id="follow" type="checkbox" checked> follow</label>
+        <button id="btn-clear" title="Clear the log">Clear</button>
+      </div>
+    </div>
+    <ol id="log"><li class="empty">No actions yet. Ask your agent to connect to the green screen.</li></ol>
+  </aside>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const screenEl = $("screen"), logEl = $("log");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+let cols = 0, nrows = 0, cells = [], screen = null, cursor = 0, entries = new Map(), started = new Map(), replaying = false;
+let errTimer = null, keyTimer = null;
+
+// ---------------------------------------------------------------- screen
+function build(rows, c) {
+  nrows = rows; cols = c; cells = [];
+  screenEl.textContent = "";
+  for (let r = 0; r < rows; r++) {
+    const row = document.createElement("div");
+    row.className = "row";
+    for (let k = 0; k < c; k++) {
+      const s = document.createElement("span");
+      s.textContent = " ";
+      s.dataset.i = r * c + k;
+      row.appendChild(s);
+      cells.push(s);
+    }
+    screenEl.appendChild(row);
+  }
+  fit();
+}
+
+function fit() {
+  if (!cols) return;
+  const width = screenEl.parentElement.clientWidth - 36;
+  screenEl.style.fontSize = Math.max(9, Math.min(22, width / (cols * 0.602))) + "px";
+}
+window.addEventListener("resize", fit);
+
+function mark(list, size) {
+  const mask = new Uint8Array(size);
+  for (const [r, c, len] of list) {
+    const start = (r - 1) * cols + (c - 1);
+    for (let k = 0; k < len; k++) mask[(start + k) % size] = 1;
+  }
+  return mask;
+}
+
+function render(s) {
+  screen = s;
+  if (s.rows.length !== nrows || s.cols !== cols) build(s.rows.length, s.cols);
+  const size = nrows * cols;
+  const input = mark(s.fields.map((f) => [f.row, f.col, f.length]), size);
+  const bright = mark(s.bright || [], size);
+  for (let r = 0; r < nrows; r++) {
+    const line = s.rows[r] || "";
+    for (let k = 0; k < cols; k++) {
+      const i = r * cols + k, el = cells[i];
+      const ch = line[k] || " ";
+      if (el.textContent !== ch) el.textContent = ch;
+      el.className = (input[i] ? "in" : "") + (bright[i] ? " hi" : "");
+    }
+  }
+  setCursor((s.cursor[0] - 1) * cols + (s.cursor[1] - 1));
+  screenEl.classList.toggle("off", !s.connected);
+  setLock(s.connected ? (s.keyboard_locked ? "X SYSTEM" : "") : "DISCONNECTED");
+  $("oia-host").textContent = s.host || "";
+  setSession(s.connected, s.host);
+}
+
+function setCursor(i) {
+  if (!cells.length) return;
+  cells[cursor] && cells[cursor].classList.remove("cur");
+  cursor = ((i % cells.length) + cells.length) % cells.length;
+  cells[cursor].classList.add("cur");
+  $("oia-pos").textContent = String(Math.floor(cursor / cols) + 1).padStart(2, "0") + "/" + String(cursor % cols + 1).padStart(3, "0");
+}
+
+function setLock(text) { $("oia-lock").textContent = text || ""; }
+
+function setSession(connected, host) {
+  const el = $("session");
+  el.textContent = connected ? "connected " + (host || "") : "disconnected";
+  el.className = "pill " + (connected ? "ok" : "bad");
+}
+
+function showError(text) {
+  $("oia-err").textContent = text ? "X -f " + text : "";
+  clearTimeout(errTimer);
+  if (text) errTimer = setTimeout(() => ($("oia-err").textContent = ""), 4000);
+}
+
+function typingDelay(n, source) {
+  if (replaying || document.hidden || source === "operator" || queue.length > 12) return 0;
+  const speed = +$("speed").value;          // 0 = slow, 100 = instant
+  if (speed >= 100) return 0;
+  const base = 25 + (100 - speed) * 2.2;    // ~25..245 ms per keystroke
+  return Math.min(base, 2500 / Math.max(n, 1));
+}
+
+async function animateType(ev) {
+  if (!cells.length) return;
+  const size = cells.length, start = (ev.row - 1) * cols + (ev.col - 1);
+  if (ev.clear && ev.field_length) {
+    for (let k = 0; k < ev.field_length; k++) cells[(start + k) % size].textContent = " ";
+  }
+  const n = ev.hidden ? ev.typed : ev.text.length, delay = typingDelay(n, ev.source);
+  setCursor(start);
+  for (let k = 0; k < n; k++) {
+    const el = cells[(start + k) % size];
+    if (!ev.hidden) el.textContent = ev.text[k];
+    el.classList.remove("typed"); void el.offsetWidth; el.classList.add("typed");
+    setCursor(start + k + 1);
+    if (delay) await sleep(delay);
+  }
+}
+
+const KEY_LABEL = { enter: "⏎ ENTER", clear: "CLEAR", tab: "TAB ⇥", backtab: "⇤ BACKTAB", home: "HOME", eraseeof: "ERASE EOF",
+  eraseinput: "ERASE INPUT", newline: "NEWLINE", backspace: "⌫", delete: "DEL", left: "←", right: "→", up: "↑", down: "↓", end: "END" };
+
+async function animateKey(ev) {
+  const cap = $("keycap");
+  const label = KEY_LABEL[ev.key] || ev.key.toUpperCase();
+  const pad = document.querySelector(`#keypad [data-key="${ev.key}"]`);
+  if (pad) { pad.classList.add("pressed"); setTimeout(() => pad.classList.remove("pressed"), 450); }
+  if (ev.aid) setLock("X SYSTEM");
+  if (replaying || (ev.source === "operator" && !ev.aid)) return;
+  cap.textContent = label;
+  cap.classList.toggle("operator", ev.source === "operator");
+  cap.classList.add("show");
+  clearTimeout(keyTimer);
+  keyTimer = setTimeout(() => cap.classList.remove("show"), 900);
+  if (ev.aid && queue.length < 12 && !document.hidden) await sleep(350);
+}
+
+// ---------------------------------------------------------------- action log
+const fmt = (v) => JSON.stringify(v);
+function describe(name, a) {
+  const at = a.row != null ? ` @ row ${a.row}, col ${a.column}` : a.credential !== undefined || a.text_length !== undefined ? " @ cursor" : "";
+  switch (name) {
+    case "connect": return a.host ? `${a.host}${a.port ? ":" + a.port : ""}${a.use_tls ? " (TLS)" : ""}` : "configured host";
+    case "type_text": {
+      const text = typeof a.text === "string" ? (a.hidden ? `‹hidden, ${a.text_length} chars›` : fmt(a.text))
+        : `‹${a.text_length} chars›`;
+      return `${text}${at}${a.clear_field === false ? " (append)" : ""}`;
+    }
+    case "type_credential": return `${a.credential} ••••••${at}`;
+    case "press_key": return String(a.key).toUpperCase();
+    case "wait_for_text": return `${fmt(a.text)}${a.timeout_seconds != null ? ` (≤${a.timeout_seconds}s)` : ""}`;
+    default: return "";
+  }
+}
+
+function caption(ev, active, ok = true) {
+  const cap = $("caption");
+  cap.classList.toggle("active", active);
+  cap.classList.toggle("done", !!ev && !active);
+  const badge = $("cap-badge");
+  badge.textContent = (ev && ev.source === "operator") ? "OPERATOR" : "AGENT";
+  badge.className = "badge" + (ev && ev.source === "operator" ? " operator" : "");
+  $("cap-what").textContent = ev ? `${ev.name} ${describe(ev.name, ev.arguments || {})}${active ? "" : ok ? "  ✓" : "  ✗"}`
+    : "Idle - waiting for actions";
+}
+
+function addEntry(ev) {
+  const empty = logEl.querySelector(".empty"); if (empty) empty.remove();
+  const li = document.createElement("li");
+  li.className = `entry ${ev.source} running`;
+  li.innerHTML = `<div class="top"><span class="badge ${ev.source}"></span><span class="name"></span><span class="args"></span>
+    <span class="status"><span class="spinner"></span></span></div><div class="summary"></div>`;
+  li.querySelector(".badge").textContent = ev.source === "operator" ? "OPERATOR" : "AGENT";
+  li.querySelector(".name").textContent = ev.name;
+  const args = describe(ev.name, ev.arguments || {});
+  li.querySelector(".args").textContent = args; li.querySelector(".args").title = args;
+  li.dataset.id = ev.id;
+  logEl.appendChild(li);
+  entries.set(ev.id, li);
+  while (logEl.children.length > 500) { entries.delete(+logEl.firstElementChild.dataset.id); logEl.firstElementChild.remove(); }
+  $("count").textContent = entries.size;
+  if ($("follow").checked) logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Tool events never carry type_text's text (it may be a secret); the terminal's type event
+// shows visible text and blanks hidden fields, so fill the running entry in from it.
+function revealTyped(ev) {
+  const running = [...started.values()].reverse().find((s) => s.name === "type_text" && s.source === ev.source);
+  if (!running || typeof running.arguments.text === "string") return;
+  running.arguments.text = ev.hidden ? "" : ev.text;
+  running.arguments.hidden = ev.hidden;
+  const li = entries.get(running.id);
+  if (li) { const args = describe(running.name, running.arguments); li.querySelector(".args").textContent = args; li.querySelector(".args").title = args; }
+  if (!replaying) caption(running, true);
+}
+
+function finishEntry(ev) {
+  const li = entries.get(ev.id);
+  if (!li) return;
+  li.classList.remove("running");
+  if (!ev.ok) li.classList.add("failed");
+  li.querySelector(".status").textContent = `${ev.ok ? "✓" : "✗"} ${ev.duration_ms} ms · ${new Date(ev.time * 1000).toLocaleTimeString()}`;
+  const lines = String(ev.result || "").split("\n");
+  li.querySelector(".summary").textContent = lines[0];
+  if (lines.length > 1) {
+    const d = document.createElement("details");
+    d.innerHTML = "<summary>tool output</summary><pre></pre>";
+    d.querySelector("pre").textContent = lines.slice(1).join("\n");
+    li.appendChild(d);
+  }
+  if ($("follow").checked) logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ---------------------------------------------------------------- event pipeline
+const queue = [];
+let pumping = false;
+function enqueue(ev) { queue.push(ev); if (!pumping) pump(); }
+async function pump() {
+  pumping = true;
+  while (queue.length) {
+    const ev = queue.shift();
+    try { await handle(ev); } catch (err) { console.error(err, ev); }
+  }
+  pumping = false;
+}
+
+async function handle(ev) {
+  switch (ev.type) {
+    case "hello":
+      entries.clear(); logEl.innerHTML = '<li class="empty">No actions yet. Ask your agent to connect to the green screen.</li>';
+      $("count").textContent = 0;
+      replaying = true;
+      $("btn-connect").title = "Connect to " + (ev.target || "the configured host");
+      $("mcp").textContent = ev.mcp ? `MCP: ${location.origin}/mcp` : "";
+      break;
+    case "tool":
+      if (ev.phase === "start") { addEntry(ev); started.set(ev.id, ev); if (!replaying) caption(ev, true); }
+      else {
+        finishEntry(ev);
+        const begin = started.get(ev.id) || ev; started.delete(ev.id);
+        if (!replaying) caption(begin, false, ev.ok);
+      }
+      break;
+    case "type": revealTyped(ev); await animateType(ev); break;
+    case "key": await animateKey(ev); break;
+    case "screen": render(ev.screen); break;
+    case "disconnected":
+      screenEl.classList.add("off"); setLock("DISCONNECTED"); setSession(false); break;
+  }
+  if (replaying && queue.length === 0 && ev.type !== "hello") replaying = false;
+}
+
+function openStream() {
+  const es = new EventSource("events");
+  const pill = $("stream");
+  es.onopen = () => { pill.textContent = "live"; pill.className = "pill ok live"; };
+  es.onerror = () => { pill.textContent = "reconnecting…"; pill.className = "pill bad"; };
+  es.onmessage = (m) => {
+    const ev = JSON.parse(m.data);
+    if (ev.type === "hello") { queue.length = 0; replaying = true; }
+    enqueue(ev);
+  };
+}
+
+// ---------------------------------------------------------------- operator input
+let chain = Promise.resolve();
+function post(path, body) {
+  const run = () => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    .then((r) => r.json()).then((res) => {
+      if (!res.ok) showError((res.error || res.result || "").replace(/^ERROR:\s*/, "").split("\n")[0]);
+      return res;
+    }).catch((err) => showError(String(err)));
+  chain = chain.then(run, run);
+  return chain;
+}
+const tool = (name, args = {}) => post("api/tool", { name, arguments: args });
+const keyboard = (body) => post("api/keyboard", body);
+
+const AID = new Set(["enter", "clear", "pa1", "pa2", "pa3", "attn", ...Array.from({ length: 24 }, (_, i) => "pf" + (i + 1))]);
+function pressKey(key) { return AID.has(key) ? tool("press_key", { key }) : keyboard({ key }); }
+
+screenEl.addEventListener("mousedown", (e) => {
+  const i = e.target.dataset && e.target.dataset.i;
+  screenEl.focus();
+  if (i === undefined || !screen || !screen.connected) return;
+  e.preventDefault();
+  const n = +i;
+  setCursor(n);
+  keyboard({ cursor: [Math.floor(n / cols) + 1, n % cols + 1] });
+});
+
+const KEYMAP = { Enter: "enter", Tab: "tab", ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
+  Backspace: "backspace", Delete: "delete", Home: "home", End: "eraseeof", PageUp: "pf7", PageDown: "pf8", Insert: null };
+screenEl.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  let key = null;
+  const f = /^F(\d{1,2})$/.exec(e.key);
+  if (f && +f[1] <= 12) key = "pf" + (+f[1] + (e.shiftKey ? 12 : 0));
+  else if (e.key === "Tab" && e.shiftKey) key = "backtab";
+  else if (e.key in KEYMAP) key = KEYMAP[e.key];
+  else if (e.key.length === 1) { e.preventDefault(); keyboard({ text: e.key }); return; }
+  else return;
+  e.preventDefault();
+  if (key) pressKey(key);
+});
+
+function buildKeypad() {
+  const groups = [
+    ["enter", "clear", "pa1", "pa2", "pa3", "attn"],
+    Array.from({ length: 12 }, (_, i) => "pf" + (i + 1)),
+    Array.from({ length: 12 }, (_, i) => "pf" + (i + 13)),
+    ["tab", "backtab", "home", "eraseeof", "eraseinput", "newline"],
+  ];
+  const pad = $("keypad");
+  for (const g of groups) {
+    const div = document.createElement("div"); div.className = "group";
+    for (const k of g) {
+      const b = document.createElement("button");
+      b.textContent = k.toUpperCase(); b.dataset.key = k;
+      b.addEventListener("click", () => { pressKey(k); screenEl.focus(); });
+      div.appendChild(b);
+    }
+    pad.appendChild(div);
+  }
+}
+
+$("btn-connect").addEventListener("click", () => tool("connect"));
+$("btn-disconnect").addEventListener("click", () => tool("disconnect"));
+$("btn-clear").addEventListener("click", () => {
+  entries.clear(); logEl.innerHTML = '<li class="empty">Log cleared.</li>'; $("count").textContent = 0;
+});
+
+build(24, 80);
+buildKeypad();
+openStream();
+</script>
+</body>
+</html>

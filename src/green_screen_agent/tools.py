@@ -7,14 +7,54 @@ an LLM: the rendered screen or a short confirmation, or ``ERROR: ...``.
 
 from __future__ import annotations
 
+import functools
+import inspect
+import itertools
 import json
 import os
+import time
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping, TypeVar
 
 from .terminal import SCREEN_SIZES, VALID_KEYS_HELP, Tn3270Terminal, TerminalError
 
 MAX_WAIT_SECONDS = 120.0
+
+_F = TypeVar("_F", bound=Callable[..., str])
+_CALL_IDS = itertools.count(1)
+_REDACTED_ARGUMENTS = {"type_text": "text"}
+"""Arguments that may hold secrets (text typed into a hidden field). Events carry only their
+length; viewers see typed text through the terminal's ``type`` event, which blanks hidden fields."""
+
+
+def _observed(method: _F) -> _F:
+    """Emit ``tool`` start/end events on the terminal so viewers can follow each action."""
+    signature = inspect.signature(method)
+    redact = _REDACTED_ARGUMENTS.get(method.__name__)
+
+    @functools.wraps(method)
+    def wrapper(self: GreenScreenTools, *args: Any, **kwargs: Any) -> str:
+        try:
+            bound = signature.bind(self, *args, **kwargs)
+        except TypeError:
+            return method(self, *args, **kwargs)
+        arguments = {k: v for k, v in bound.arguments.items() if k != "self"}
+        if redact in arguments:
+            arguments[f"{redact}_length"] = len(str(arguments.pop(redact)))
+        event = {"type": "tool", "id": next(_CALL_IDS), "name": method.__name__}
+        self.terminal.emit({**event, "phase": "start", "arguments": arguments})
+        started = time.monotonic()
+        try:
+            result = method(self, *args, **kwargs)
+        except Exception as exc:
+            self.terminal.emit({**event, "phase": "end", "ok": False, "result": f"ERROR: {exc}",
+                                "duration_ms": round((time.monotonic() - started) * 1000)})
+            raise
+        self.terminal.emit({**event, "phase": "end", "ok": True, "result": result,
+                            "duration_ms": round((time.monotonic() - started) * 1000)})
+        return result
+
+    return wrapper  # type: ignore[return-value]
 
 
 class ToolError(Exception):
@@ -194,6 +234,7 @@ class GreenScreenTools:
 
     # ----------------------------------------------------------------- tools
 
+    @_observed
     def connect(self, host: str | None = None, port: int | None = None, use_tls: bool | None = None) -> str:
         host = (host or self.settings.host).strip()
         tls = self.settings.tls if use_tls is None else bool(use_tls)
@@ -213,14 +254,17 @@ class GreenScreenTools:
         note = "" if ready else " The host has not unlocked the keyboard yet - use wait_for_text or read_screen."
         return f"Connected to {host}:{port}{' using TLS' if tls else ''}.{note}\n{screen.render()}"
 
+    @_observed
     def read_screen(self) -> str:
         return self.terminal.screen().render()
 
+    @_observed
     def type_text(self, text: str, row: int | None = None, column: int | None = None,
                   clear_field: bool | None = None) -> str:
         result = self.terminal.type_text(text, row, column, clear_field=clear_field is not False)
         return self._typed_message(f"Typed {result.typed} of {result.requested} characters", result)
 
+    @_observed
     def type_credential(self, credential: str, row: int | None = None, column: int | None = None) -> str:
         kind = str(credential).strip().lower()
         if kind not in ("username", "password"):
@@ -237,6 +281,7 @@ class GreenScreenTools:
             message += f" WARNING: the field is shorter than the configured {kind}; it was truncated."
         return message
 
+    @_observed
     def press_key(self, key: str) -> str:
         result = self.terminal.press(key)
         screen = result.screen
@@ -251,6 +296,7 @@ class GreenScreenTools:
             status = f"Pressed {result.key}."
         return f"{status}\n{screen.render()}"
 
+    @_observed
     def wait_for_text(self, text: str, timeout_seconds: float | None = None) -> str:
         if not str(text).strip():
             raise ToolError("text must not be empty.")
@@ -260,6 +306,7 @@ class GreenScreenTools:
         status = f'Found "{text}".' if found else f'"{text}" did not appear within {timeout:g}s.'
         return f"{status}\n{screen.render()}"
 
+    @_observed
     def disconnect(self) -> str:
         address = self.terminal.address
         return f"Disconnected from {address}." if self.terminal.disconnect() else "Not connected."

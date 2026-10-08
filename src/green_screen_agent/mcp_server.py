@@ -109,13 +109,26 @@ def create_server(tools: GreenScreenTools | None = None) -> MCPServer:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="TN3270 green-screen MCP server (stdio transport).")
     parser.add_argument("--version", action="version", version=__version__)
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--live", nargs="?", type=int, const=3271, default=None, metavar="PORT",
+        help="Also serve the live green-screen web view of this session on 127.0.0.1:PORT (default 3271; "
+        "a free port is used if it is taken).",
+    )
+    args = parser.parse_args(argv)
     # stdout carries the MCP protocol; diagnostics go to stderr.
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
     tools = GreenScreenTools()
+    live = None
+    if args.live is not None:
+        from .live import LiveView
+
+        live = LiveView(tools, port=args.live)
+        print(f"Live green screen: {live.start()}/", file=sys.stderr, flush=True)
     try:
         create_server(tools).run("stdio")
     finally:
+        if live is not None:
+            live.close()
         tools.close()
 
 
