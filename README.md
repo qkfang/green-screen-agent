@@ -140,6 +140,38 @@ transaction monitor) runs inside a TSO session, so start it from there:
    Enter: `BTC0` (Nevada Dept. of Labor demo), `MENU` (Murach customer sample) or `KSGM`.
 5. To leave, clear the screen and enter `KSSF` (back to `READY`), then `LOGOFF`.
 
+### Deploy to Azure Container Apps
+
+Two container apps in one Container Apps environment:
+
+| App | Image | Ingress |
+|---|---|---|
+| `tk5-mvs-kicks` | `backscratcher/tk5-mvs-kicks:latest` (imported into ACR) | public TCP 3270, IP-restricted (default: your public IP) |
+| `green-screen-live` | this repo's `Dockerfile` (built in ACR) | public HTTPS: live UI at `/`, MCP at `/mcp` |
+
+The shared resources (Log Analytics, Container Registry, managed identity with AcrPull,
+virtual network, VNet-integrated Container Apps environment) are defined in
+[bicep/main.bicep](bicep/main.bicep). External TCP ingress needs the VNet; re-running
+`deploy-azure-resources.ps1` against an environment created without one deletes and recreates
+it (and its apps), so re-run the two app scripts afterwards.
+
+```powershell
+az login
+.\scripts\deploy-azure-resources.ps1      # resource group rg-green-screen-agent + bicep\main.bicep (australiaeast)
+.\scripts\deploy-tk5.ps1                  # TK5 MVS + KICKS; IPL takes ~2 minutes
+$env:TN3270_PASSWORD = "CUL8TR"           # stored as a Container Apps secret
+.\scripts\deploy-green-screen-agent.ps1   # prints the live UI and MCP URLs
+```
+
+Point Copilot CLI or VS Code at the printed MCP URL, for example
+`"tn3270": {"type": "http", "url": "https://<fqdn>/mcp", "tools": ["*"]}`.
+Connect a 3270 emulator to the TK5 address printed by `deploy-tk5.ps1`
+(for example `wc3270 <tk5-fqdn>:3270`). Only the IPs passed in `-AllowedIpRange` can connect.
+The default is the public IP of the machine that ran the script, so re-run the script from a new location.
+All scripts accept `-ResourceGroup` and `-Subscription`; re-run them to update.
+The live app has no authentication, so anyone with its URL can drive the TK5 session.
+Delete everything with `az group delete -n rg-green-screen-agent`.
+
 ## Security notes
 
 - Passwords are typed by `type_credential` from configuration, only into non-display

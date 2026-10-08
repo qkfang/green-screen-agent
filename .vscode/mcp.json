@@ -11,7 +11,7 @@
     },
     "tn3270-live": {
       "type": "http",
-      "url": "http://127.0.0.1:3271/mcp"
+      "url": "https://green-screen-live.mangostone-28276456.australiaeast.azurecontainerapps.io/mcp"
     }
   }
 }

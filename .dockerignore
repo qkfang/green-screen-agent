@@ -1,0 +1,17 @@
+.git
+.github
+.azure
+.vscode
+.venv
+venv
+.env
+.pytest_cache
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+build
+dist
+docs
+scripts
+tests
+tnz.log
