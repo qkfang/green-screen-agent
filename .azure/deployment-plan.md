@@ -155,8 +155,8 @@ Validated: 2026-10-08
 - [x] Verify live UI loads and `connect` reaches TK5 internally (GET / 200, `connect` -> TK5 logo screen from `tk5-mvs-kicks:3270`, MCP initialize 200)
 - [x] Live RBAC: `gsa-identity` has only AcrPull on `gsaacrjge77rrntjyto`
 
-Endpoints: https://green-screen-live.mangostone-28276456.australiaeast.azurecontainerapps.io/ (UI),
-https://green-screen-live.mangostone-28276456.australiaeast.azurecontainerapps.io/mcp (MCP)
+Endpoints: https://green-screen-live.bravewater-5b1dc3d4.australiaeast.azurecontainerapps.io/ (UI),
+https://green-screen-live.bravewater-5b1dc3d4.australiaeast.azurecontainerapps.io/mcp (MCP)
 
 ---
 

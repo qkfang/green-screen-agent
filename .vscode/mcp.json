@@ -9,9 +9,13 @@
       "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
       "args": ["-m", "green_screen_agent.mcp_server", "--live"]
     },
-    "tn3270-live": {
+    "tn3270-local": {
       "type": "http",
       "url": "https://green-screen-live.mangostone-28276456.australiaeast.azurecontainerapps.io/mcp"
+    },
+    "tn3270-live": {
+      "type": "http",
+      "url": "https://green-screen-live.bravewater-5b1dc3d4.australiaeast.azurecontainerapps.io/mcp"
     }
   }
 }
