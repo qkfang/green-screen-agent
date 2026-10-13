@@ -329,7 +329,8 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 
     tools = GreenScreenTools()
-    live = LiveView(tools, host=args.host, port=args.port, mcp_server=create_server(tools))
+    # soft_errors: Microsoft Foundry's MCP tool aborts the whole run on an MCP error result.
+    live = LiveView(tools, host=args.host, port=args.port, mcp_server=create_server(tools, soft_errors=True))
     try:
         if args.connect:
             print(_as_operator(tools.call, "connect").splitlines()[0], file=sys.stderr)

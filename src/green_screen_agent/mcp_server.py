@@ -35,29 +35,39 @@ def _arg(tool: str, name: str) -> str:
     return _SPECS[tool]["parameters"]["properties"][name]["description"]
 
 
-def _run(fn: Callable[..., str], *args: Any) -> str:
+def _run(fn: Callable[..., str], *args: Any, soft_errors: bool = False) -> str:
     try:
         return fn(*args)
     except (ToolError, TerminalError, ValueError) as exc:
+        if soft_errors:
+            return f"ERROR: {exc}"
         # MCP only forwards the message of its own ToolError to the model.
         raise MCPToolError(str(exc)) from exc
 
 
-def create_server(tools: GreenScreenTools | None = None) -> MCPServer:
-    """Create the MCP server; tool descriptions and parameters mirror :data:`TOOL_SPECS`."""
+def create_server(tools: GreenScreenTools | None = None, *, soft_errors: bool = False) -> MCPServer:
+    """Create the MCP server; tool descriptions and parameters mirror :data:`TOOL_SPECS`.
+
+    With ``soft_errors`` a failed tool call returns ``ERROR: <message>`` as normal text instead of an
+    MCP error result. Microsoft Foundry's MCP tool aborts the whole agent run on an MCP error result,
+    so the model could not recover from e.g. "Not connected" or a locked keyboard.
+    """
     tools = tools if tools is not None else GreenScreenTools()
     server = MCPServer(name="tn3270", title="TN3270 green screen", version=__version__,
                        instructions=AGENT_INSTRUCTIONS)
+
+    def run(fn: Callable[..., str], *args: Any) -> str:
+        return _run(fn, *args, soft_errors=soft_errors)
 
     def connect(
         host: Annotated[str | None, Field(description=_arg("connect", "host"))] = None,
         port: Annotated[int | None, Field(description=_arg("connect", "port"))] = None,
         use_tls: Annotated[bool | None, Field(description=_arg("connect", "use_tls"))] = None,
     ) -> str:
-        return _run(tools.connect, host, port, use_tls)
+        return run(tools.connect, host, port, use_tls)
 
     def read_screen() -> str:
-        return _run(tools.read_screen)
+        return run(tools.read_screen)
 
     def type_text(
         text: Annotated[str, Field(description=_arg("type_text", "text"))],
@@ -65,26 +75,26 @@ def create_server(tools: GreenScreenTools | None = None) -> MCPServer:
         column: Annotated[int | None, Field(description=_arg("type_text", "column"))] = None,
         clear_field: Annotated[bool | None, Field(description=_arg("type_text", "clear_field"))] = None,
     ) -> str:
-        return _run(tools.type_text, text, row, column, clear_field)
+        return run(tools.type_text, text, row, column, clear_field)
 
     def type_credential(
         credential: Annotated[Literal["username", "password"], Field(description=_arg("type_credential", "credential"))],
         row: Annotated[int | None, Field(description=_arg("type_credential", "row"))] = None,
         column: Annotated[int | None, Field(description=_arg("type_credential", "column"))] = None,
     ) -> str:
-        return _run(tools.type_credential, credential, row, column)
+        return run(tools.type_credential, credential, row, column)
 
     def press_key(key: Annotated[str, Field(description=_arg("press_key", "key"))]) -> str:
-        return _run(tools.press_key, key)
+        return run(tools.press_key, key)
 
     def wait_for_text(
         text: Annotated[str, Field(description=_arg("wait_for_text", "text"))],
         timeout_seconds: Annotated[float | None, Field(description=_arg("wait_for_text", "timeout_seconds"))] = None,
     ) -> str:
-        return _run(tools.wait_for_text, text, timeout_seconds)
+        return run(tools.wait_for_text, text, timeout_seconds)
 
     def disconnect() -> str:
-        return _run(tools.disconnect)
+        return run(tools.disconnect)
 
     local = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
     read_only = ToolAnnotations(readOnlyHint=True, openWorldHint=True)

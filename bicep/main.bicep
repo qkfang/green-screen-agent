@@ -1,5 +1,6 @@
 // Shared Azure resources for the green-screen agent demo: Log Analytics, Container Registry,
-// a user-assigned identity with AcrPull, a virtual network, and a VNet-integrated Container Apps
+// a user-assigned identity with AcrPull, a Microsoft Foundry account + project + model deployment
+// (foundry.bicep), a virtual network, and a VNet-integrated Container Apps
 // environment (external TCP ingress, used for TN3270 port 3270, requires a custom VNet).
 // The container apps themselves are deployed by scripts\deploy-tk5.ps1 and
 // scripts\deploy-green-screen-agent.ps1 into this environment.
@@ -23,6 +24,15 @@ param vnetAddressPrefix string = '10.42.0.0/16'
 
 @description('Container Apps infrastructure subnet (workload profiles environments need at least /27).')
 param infrastructureSubnetPrefix string = '10.42.0.0/23'
+
+@description('Model deployed to Foundry for the prompt agent.')
+param modelName string = 'gpt-4.1'
+
+@description('Version of the model.')
+param modelVersion string = '2025-04-14'
+
+@description('Optional object ID of the developer who runs src\\agent locally; gets "Azure AI User" on Foundry.')
+param developerPrincipalId string = ''
 
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var registryName = take('${toLower(replace(prefix, '-', ''))}acr${uniqueString(resourceGroup().id)}', 50)
@@ -123,6 +133,23 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
+module foundry 'foundry.bicep' = {
+  name: 'foundry'
+  params: {
+    name: take('${toLower(replace(prefix, '-', ''))}-foundry-${uniqueString(resourceGroup().id)}', 64)
+    location: location
+    tags: tags
+    modelName: modelName
+    modelVersion: modelVersion
+    appPrincipalId: identity.properties.principalId
+    developerPrincipalId: developerPrincipalId
+  }
+}
+
+output foundryAccountName string = foundry.outputs.accountName
+output foundryProjectName string = foundry.outputs.projectName
+output foundryProjectEndpoint string = foundry.outputs.projectEndpoint
+output foundryModelDeployment string = foundry.outputs.modelDeploymentName
 output registryName string = registry.name
 output registryLoginServer string = registry.properties.loginServer
 output identityId string = identity.id

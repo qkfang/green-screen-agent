@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <NoWarn>OPENAI001;SCME0001</NoWarn>
+        <RootNamespace>GreenScreenApp</RootNamespace>
+        <AssemblyName>green_screen_agent_app</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Azure.AI.Extensions.OpenAI" Version="2.0.0" />
+        <PackageReference Include="Azure.AI.Projects" Version="2.0.0" />
+        <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    </ItemGroup>
+</Project>

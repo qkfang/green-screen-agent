@@ -53,5 +53,7 @@ function Get-SharedResources([string]$ResourceGroup) {
         IdentityId    = $outputs.identityId.value
         EnvironmentId = $outputs.environmentId.value
         SubnetPrefix  = $outputs.infrastructureSubnetPrefix.value
+        FoundryProjectEndpoint = $outputs.foundryProjectEndpoint.value
+        FoundryModelDeployment = $outputs.foundryModelDeployment.value
     }
 }

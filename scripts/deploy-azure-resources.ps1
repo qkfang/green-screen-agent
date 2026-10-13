@@ -6,7 +6,9 @@
     Creates the resource group, then deploys bicep\main.bicep: Log Analytics workspace, Azure
     Container Registry (Basic, admin user disabled), a user-assigned managed identity with AcrPull
     on the registry, a virtual network, and a VNet-integrated Container Apps environment (needed
-    for external TCP ingress to TN3270). An existing environment without a VNet is deleted together
+    for external TCP ingress to TN3270), and a Microsoft Foundry account, project and gpt-4.1 model
+    deployment (Entra auth only; "Azure AI User" for the managed identity and the signed-in user).
+    An existing environment without a VNet is deleted together
     with its container apps and recreated. Otherwise safe to re-run.
     Then run deploy-tk5.ps1 and deploy-green-screen-agent.ps1.
 #>
@@ -42,11 +44,15 @@ if ($LASTEXITCODE -eq 0 -and $existingSubnet -eq "none") {
     Invoke-Az containerapp env delete -n $environmentName -g $ResourceGroup --yes -o none
 }
 
+# The signed-in user gets "Azure AI User" on Foundry so src\agent can run locally (skipped for service principals).
+$developerObjectId = & { $ErrorActionPreference = "Continue"; & az ad signed-in-user show --query id -o tsv 2>$null }
+if ($LASTEXITCODE -ne 0 -or -not $developerObjectId) { $developerObjectId = "" }
+
 Write-Step "Deploying $template"
 # Right after a delete, the environment name stays reserved for a while (ManagedEnvironmentScheduledForDelete).
 for ($attempt = 1; ; $attempt++) {
     $result = & { $ErrorActionPreference = "Continue"; & az deployment group create -g $ResourceGroup -n $InfraDeploymentName `
-            --template-file $template --parameters location=$Location prefix=$Prefix -o none 2>&1 }
+            --template-file $template --parameters location=$Location prefix=$Prefix developerPrincipalId=$developerObjectId -o none 2>&1 }
     if ($LASTEXITCODE -eq 0) { break }
     $message = $result | Out-String
     if ($message -notmatch "ManagedEnvironmentScheduledForDelete" -or $attempt -ge 30) {
@@ -64,4 +70,5 @@ Write-Host "  Resource group : $ResourceGroup ($Location)"
 Write-Host "  Registry       : $($shared.LoginServer)"
 Write-Host "  Identity       : $($shared.IdentityId)"
 Write-Host "  Environment    : $($shared.EnvironmentId)"
-Write-Host "Next: .\scripts\deploy-tk5.ps1, then .\scripts\deploy-green-screen-agent.ps1"
+Write-Host "  Foundry project: $($shared.FoundryProjectEndpoint) (model $($shared.FoundryModelDeployment))"
+Write-Host "Next: .\scripts\deploy-tk5.ps1, then .\scripts\deploy-green-screen-agent.ps1 and .\scripts\deploy-agent-app.ps1"

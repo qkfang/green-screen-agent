@@ -114,6 +114,33 @@ green-screen-agent --confirm-keys        # interactive; approve every key sent t
 The agent version is created on start and deleted on exit (`--keep-agent` keeps it).
 The model runs in Foundry; the 3270 session and credentials stay in this process.
 
+### Foundry agent app (.NET, UI-driven)
+
+[src/agent](src/agent) is an ASP.NET Core app (`net10.0`, `Azure.AI.Projects` 2.x) modelled on
+[invoice-ledger-agent](https://github.com/qkfang/invoice-ledger-agent/tree/main/src/invledger_app).
+On start it creates a **Foundry prompt agent** (`green-screen-agent`: model + instructions + a remote
+**MCP tool** pointing at the live server's `/mcp` endpoint). The web UI takes an action step in plain
+language, sends it to the agent and shows every MCP tool call (with the screen it returned) and the
+agent's answer next to the live green screen. Foundry runs the MCP calls itself, so the MCP endpoint
+must be reachable from Azure (the `green-screen-live` container app).
+
+```powershell
+az login
+.\scripts\deploy-azure-resources.ps1      # includes the Foundry account, project and gpt-4.1 deployment
+$env:AZURE_AI_PROJECT_ENDPOINT = "<foundryProjectEndpoint output>"
+$env:AZURE_AI_MODEL_DEPLOYMENT_NAME = "gpt-4.1"
+$env:GREEN_SCREEN_MCP_URL = "https://<green-screen-live fqdn>/mcp"
+dotnet run --project src\agent --launch-profile agent     # UI on http://127.0.0.1:5080
+.\scripts\deploy-agent-app.ps1                            # optional: host the app in Container Apps
+```
+
+Locally the app uses your `az login` account (it needs *Azure AI User* on the Foundry account, which
+`deploy-azure-resources.ps1` grants to the signed-in user); in Azure it uses the shared managed identity
+(`AZURE_CLIENT_ID`). The live server runs its MCP endpoint with `soft_errors`, so a failed tool call
+(for example "Not connected") comes back as `ERROR: ...` text the model can recover from; Foundry
+aborts the whole run on an MCP error result. The app has no authentication, so keep it on localhost
+or protect it before exposing it: anyone who can reach it can make the agent operate the session.
+
 ### Real mainframe for testing (MVS 3.8j TK5 + KICKS)
 
 The Docker image is `linux/amd64` only. On Windows PowerShell, use the launcher below;
@@ -178,7 +205,7 @@ Further reading:
 
 ### Deploy to Azure Container Apps
 
-Two container apps in one Container Apps environment:
+Two container apps in one Container Apps environment (plus an optional third, the Foundry agent app above):
 
 | App | Image | Ingress |
 |---|---|---|
@@ -187,7 +214,8 @@ Two container apps in one Container Apps environment:
 
 The shared resources (Log Analytics, Container Registry, managed identity with AcrPull,
 virtual network, VNet-integrated Container Apps environment) are defined in
-[bicep/main.bicep](bicep/main.bicep). External TCP ingress needs the VNet; re-running
+[bicep/main.bicep](bicep/main.bicep). The same template deploys the Microsoft Foundry account, project
+and model deployment from [bicep/foundry.bicep](bicep/foundry.bicep). External TCP ingress needs the VNet; re-running
 `deploy-azure-resources.ps1` against an environment created without one deletes and recreates
 it (and its apps), so re-run the two app scripts afterwards.
 

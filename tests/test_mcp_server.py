@@ -59,6 +59,18 @@ def test_mcp_sign_on_flow(simulator):
     assert not any(DEMO_SECRET in text for _, text in results)
 
 
+def test_mcp_soft_errors_return_text_instead_of_an_error_result():
+    async def scenario(soft_errors):
+        tools = GreenScreenTools(demo_settings("127.0.0.1", 3270))
+        async with Client(create_server(tools, soft_errors=soft_errors)) as client:
+            return await client.call_tool("read_screen", {})
+
+    strict = anyio.run(scenario, False)
+    soft = anyio.run(scenario, True)
+    assert strict.is_error
+    assert not soft.is_error and text_of(soft).startswith("ERROR: Not connected")
+
+
 def test_mcp_stdio_server(simulator, tmp_path):
     host, port = simulator
     params = StdioServerParameters(

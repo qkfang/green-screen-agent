@@ -1,0 +1,29 @@
+:root { color-scheme: dark; --bg:#0b100d; --panel:#111915; --line:#1f3a2a; --fg:#d6f5dd; --muted:#7fa38a; --accent:#35e07a; --err:#ff6b6b; }
+* { box-sizing: border-box; }
+body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); font: 14px/1.45 Segoe UI, system-ui, sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+header h1 { margin: 0; font-size: 16px; color: var(--accent); }
+.spacer { flex: 1; }
+.muted { color: var(--muted); }
+a { color: var(--accent); }
+button { background: var(--accent); color: #04140a; border: 0; border-radius: 4px; padding: 7px 14px; font-weight: 600; cursor: pointer; }
+button:disabled { opacity: .5; cursor: progress; }
+header button { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(380px, 1fr) minmax(380px, 1fr); }
+.chat { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+#log { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.hint { margin: 0; }
+.msg { padding: 8px 12px; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+.msg.user { background: #12301f; border: 1px solid var(--line); align-self: flex-end; max-width: 90%; }
+.msg.agent { background: var(--panel); border: 1px solid var(--line); }
+.msg.error { border: 1px solid var(--err); color: var(--err); }
+.msg.pending { color: var(--muted); font-style: italic; }
+details.tool { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 4px; padding: 4px 10px; }
+details.tool.failed { border-left-color: var(--err); }
+details.tool summary { cursor: pointer; font-family: Consolas, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+details.tool pre { margin: 6px 0 2px; font: 12px/1.25 Consolas, monospace; white-space: pre-wrap; overflow-x: auto; color: var(--fg); }
+#step-form { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
+#step { flex: 1; resize: vertical; min-height: 44px; max-height: 160px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font: inherit; }
+.screen { min-height: 0; }
+.screen iframe { width: 100%; height: 100%; border: 0; background: #000; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } }

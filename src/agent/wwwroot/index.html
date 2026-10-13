@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Green Screen Agent</title>
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<header>
+  <h1>Green Screen Agent</h1>
+  <span id="agent-info" class="muted"></span>
+  <span class="spacer"></span>
+  <a id="live-link" href="#" target="_blank" rel="noopener">Open live green screen</a>
+  <button id="new-session" type="button" title="Start a new agent conversation">New conversation</button>
+</header>
+
+<main>
+  <section class="chat">
+    <div id="log" aria-live="polite">
+      <p class="muted hint">Type an action step in plain language, for example
+        <em>"Connect and sign on, then tell me what is on the screen"</em>.
+        The Foundry agent drives the green screen through the MCP service; every tool call is shown below.</p>
+    </div>
+    <form id="step-form">
+      <textarea id="step" rows="2" placeholder="Describe the next action step..." autofocus></textarea>
+      <button id="send" type="submit">Run step</button>
+    </form>
+  </section>
+
+  <section class="screen">
+    <iframe id="live" title="Live green screen" referrerpolicy="no-referrer"></iframe>
+  </section>
+</main>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
